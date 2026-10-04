@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minimax-H3 ComfyUI Local Workflow Generator</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#14161a;color:#d8dbe0;font:13px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:10px 16px;background:#1c1f25;border-bottom:1px solid #2c313a}
+header h1{margin:0;font-size:16px}header small{color:#8a93a0}
+.bar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;background:#1c1f25;border-bottom:1px solid #2c313a}
+button{background:#2b6cb0;color:#fff;border:0;border-radius:4px;padding:6px 10px;cursor:pointer;font:inherit}
+button.s{background:#3a404b}button:hover{filter:brightness(1.15)}
+main{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px;padding:14px 16px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+section{background:#1c1f25;border:1px solid #2c313a;border-radius:6px;padding:10px;margin-bottom:12px}
+h2{margin:0 0 8px;font-size:13px;color:#9db4d0}
+label{display:block;margin:6px 0 2px;color:#a9b0bb}
+input,textarea,select{width:100%;background:#101216;color:#e6e8eb;border:1px solid #333a45;border-radius:4px;padding:5px;font:inherit}
+input[type=checkbox]{width:auto;margin-right:6px}
+textarea{resize:vertical;min-height:54px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 10px}
+.cb{display:flex;align-items:center;margin-top:8px}.cb label{margin:0}
+.sc{border:1px solid #333a45;border-radius:5px;padding:8px;margin-bottom:8px;background:#171a1f}
+.sc b{color:#9db4d0}.fr{color:#8fd19e;font-size:12px}
+.err{color:#ff8a8a}.wrn{color:#f0c674}.ok{color:#8fd19e}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px ui-monospace,Consolas,monospace}
+#out{min-height:160px;font:11px ui-monospace,Consolas,monospace}
+</style></head><body>
+<header><h1>Minimax-H3 &rarr; ComfyUI workflow generator</h1>
+<small>100% offline &middot; RAM 192 GB &middot; VRAM 32 GB &middot; single local GPU &middot; emits ComfyUI frontend (UI) JSON only</small></header>
+<div class="bar">
+<button id="bAdd">Add Scene</button><button id="bRem" class="s">Remove Scene</button><button id="bEx" class="s">Load Example</button>
+<button id="bGen">Generate Workflow JSON</button><button id="bCopy">Copy Workflow JSON</button><button id="bDl">Download Workflow JSON</button>
+</div>
+<main><div>
+<section><h2>Prompts</h2>
+<label>1. Main text prompt</label><textarea id="main"></textarea>
+<label>2. Negative prompt</label><textarea id="neg">low quality, blurry, distorted faces, extra limbs, watermark, text, flickering, jitter, bad anatomy, oversaturated, noisy, artifacts</textarea></section>
+<section><h2>3. Scenes</h2><div id="scenes"></div></section>
+<section><h2>First frame, audio, LoRA</h2><div class="g">
+<div><label>4. First frame mode</label><select id="mode"><option>global_first_frame_scene1_only</option><option>per_scene_manual</option><option selected>last_frame_chain</option></select></div>
+<div><label>5. Global first frame filename</label><input id="gff" placeholder="optional.png"></div>
+<div><label>Scene 1 reference source</label><select id="rs"><option value="upload">Uploaded photo (filename at left)</option><option value="gen">Generate from text prompt</option></select></div>
+<div><label>Prompt for generated first frame (blank = main + scene 1)</label><textarea id="gp" style="min-height:40px"></textarea></div>
+<div><label>9. LoRA strength</label><input id="ls" type="number" value="0.75" min="0" max="2" step="0.05"></div>
+<div><label>10. Video VAE</label><select id="vae"><option>minimax_h3_video_vae_int8_convrot</option><option>minimax_h3_video_vae_fp16</option></select></div></div>
+<div class="cb"><input type="checkbox" id="aud"><label for="aud">6. Audio enabled</label></div>
+<div class="cb"><input type="checkbox" id="lora"><label for="lora">7. LoRA enabled</label></div>
+<div class="cb"><input type="checkbox" id="turbo"><label for="turbo">8. Turbo 4-step mode</label></div></section>
+<section><h2>Video and sampling</h2><div class="g">
+<div><label>11. Width</label><input id="w" type="number" value="512"></div>
+<div><label>12. Height</label><input id="h" type="number" value="288"></div>
+<div><label>13. FPS</label><input id="fps" type="number" value="24"></div>
+<div><label>14. Default scene duration (s)</label><input id="dd" type="number" value="15"></div>
+<div><label>15. Max total duration (s)</label><input id="mx" type="number" value="300" placeholder="no limit"></div>
+<div><label>16. Steps</label><input id="steps" type="number"></div>
+<div><label>17. CFG</label><input id="cfg" type="number" step="0.1"></div>
+<div><label>18. Sampler</label><select id="smp"><option>euler</option><option>euler_cfg_pp</option><option>euler_ancestral</option><option>euler_ancestral_cfg_pp</option><option>heun</option><option>heunpp2</option><option>dpm_2</option><option>dpm_2_ancestral</option><option>lms</option><option>dpm_fast</option><option>dpm_adaptive</option><option>dpmpp_2s_ancestral</option><option>dpmpp_sde</option><option>dpmpp_2m</option><option>dpmpp_2m_cfg_pp</option><option>dpmpp_2m_sde</option><option>dpmpp_3m_sde</option><option>ddpm</option><option>lcm</option><option>ipndm</option><option>ipndm_v</option><option>deis</option><option selected>res_multistep</option><option>res_multistep_cfg_pp</option><option>res_multistep_ancestral</option><option>gradient_estimation</option><option>er_sde</option><option>seeds_2</option><option>seeds_3</option><option>sa_solver</option><option>ddim</option><option>uni_pc</option><option>uni_pc_bh2</option></select></div>
+<div><label>19. Scheduler</label><select id="sch"><option selected>simple</option><option>sgm_uniform</option><option>karras</option><option>exponential</option><option>ddim_uniform</option><option>beta</option><option>normal</option><option>linear_quadratic</option><option>kl_optimal</option></select></div>
+<div><label>Denoise (0-1)</label><input id="dn" type="text" inputmode="decimal" value="1.0"></div>
+<div><label>20. Seed mode</label><select id="sm"><option>same_seed_for_all_scenes</option><option>random_seed_per_scene</option></select></div>
+<div><label>21. Base seed</label><input id="bs" type="number" value="-1"></div>
+<div><label>22. Batch size</label><input id="bat" type="number" value="1" min="1"></div>
+<div><label>Text encoder file (needs 5120-dim, the 32B)</label><input id="te" value="qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors"></div>
+<div><label>Diffusion model file</label><input id="un" value="minimax_h3_fl2va_bf16.safetensors"></div>
+<div><label>24. Final output filename</label><input id="fin" value="minimax_h3_final_video.mp4"></div></div>
+<div class="cb"><input type="checkbox" id="ec" checked><label for="ec">EasyCache (speeds up sampling)</label></div>
+<div class="cb"><input type="checkbox" id="sage" checked><label for="sage">Sage Attention (needs KJNodes + sageattention installed)</label></div>
+<div class="cb"><input type="checkbox" id="sv" checked><label for="sv">23. Save individual scene MP4s (previews only, never the final result)</label></div></section>
+</div><div>
+<section><h2>Preview</h2><pre id="pv"></pre></section>
+<section><h2>Workflow JSON <button id="bCopy2" style="float:right">Copy</button></h2><textarea id="out" readonly></textarea></section>
+</div></main>
+<script>
+(function(){
+"use strict";
+const $=i=>document.getElementById(i);
+const DESC={LoraLoaderModelOnly:"ComfyUI core LoRA loader; NOT present in the reference workflow, verify it loads the turbo LoRA"};
+let cnt=0;
+function addScene(p,d,f,s){
+ cnt++;const c=document.createElement("div");c.className="sc";
+ c.innerHTML='<b></b><label>Scene prompt</label><textarea class="sp"></textarea><div class="g"><div><label>Duration (s)</label><input class="sd" type="number" step="0.5"></div><div><label>First frame filename (optional)</label><input class="sf"></div><div><label>Seed (empty = inherit)</label><input class="ss" type="number"></div></div><div class="fr"></div>';
+ c.querySelector(".sp").value=p||"";c.querySelector(".sd").value=d||$("dd").value||15;
+ c.querySelector(".sf").value=f||"";c.querySelector(".ss").value=s==null?"":s;
+ $("scenes").appendChild(c);renum();
+}
+function renum(){[...document.querySelectorAll(".sc")].forEach((c,i)=>c.querySelector("b").textContent="Scene "+(i+1));}
+function scenes(){return [...document.querySelectorAll(".sc")].map(c=>({p:c.querySelector(".sp").value.trim(),d:parseFloat(c.querySelector(".sd").value),f:c.querySelector(".sf").value.trim(),s:c.querySelector(".ss").value.trim(),el:c}));}
+function autofill(){
+ const t=$("turbo").checked;
+ $("steps").value=t?4:20;$("cfg").value=t?1.0:5.0;
+}
+function vl(sec,fps){const r=Math.max(5,Math.round(sec*fps));return 17*Math.ceil((r-5)/17)+5;}
+function build(){
+ const E=[],W=[],S=scenes(),w=+$("w").value,h=+$("h").value,fps=+$("fps").value;
+ const mode=$("mode").value,aud=$("aud").checked,lora=$("lora").checked,turbo=$("turbo").checked;
+ const g=$("gff").value.trim(),main=$("main").value.trim(),mxv=$("mx").value.trim();
+ const fin=($("fin").value.trim()||"minimax_h3_final_video.mp4"),base=fin.replace(/\.mp4$/i,"");
+ const dnr=$("dn").value.trim(),dnv=dnr===""?1:parseFloat(dnr);
+ if(!(dnv>0&&dnv<=1))E.push("Denoise must be a number above 0 and up to 1.");
+ if(S.length<1)E.push("At least 1 scene is required.");
+ if(!main&&!S.some(s=>s.p))E.push("All prompts are empty: fill the main prompt or at least one scene prompt.");
+ if(!(w>0))E.push("Width must be > 0.");if(!(h>0))E.push("Height must be > 0.");if(!(fps>0))E.push("FPS must be > 0.");
+ S.forEach((s,i)=>{if(!(s.d>0))E.push("Scene "+(i+1)+": duration must be > 0.");
+  s.fr=vl(s.d||0,fps);s.el.querySelector(".fr").textContent="Valid H3 frame count (17k+5) at "+fps+" fps: "+s.fr;
+  s.c=main&&s.p?main+". "+s.p:(main||s.p);});
+ const total=S.reduce((a,s)=>a+(s.d||0),0),frames=S.reduce((a,s)=>a+(s.fr||0),0);
+ if(mxv!==""&&total>+mxv)E.push("Total duration "+total+"s exceeds max total duration "+mxv+"s.");
+ if(w%16||h%16)W.push("Width/height not divisible by 16.");
+ if(turbo&&!lora)W.push("turbo LoRA may be required for 4-step sampling");
+ if(+$("bat").value>1)W.push("Batch size ignored: MiniMaxH3ImageToVideo has no batch widget.");
+ if(/8b/i.test($("te").value))W.push("An 8B Qwen3-VL encoder outputs 4096-dim embeddings; the H3 model needs 5120-dim (32B encoder). Expect a mat1/mat2 shape error.");
+ if($("rs").value==="gen")W.push("Generated first frame = frame 0 of a 5-frame H3 text-to-video clip (no separate image model is wired). Check the Preview node; re-run until you like it.");
+ W.push("Negative prompt and CFG are not wired: the reference graph uses BasicGuider (no CFG).");
+ if(mode==="last_frame_chain"&&aud)W.push("Chain trims 1 duplicate frame per join; audio is not trimmed (same as the reference graph).");
+ let nid=0,lid=0;const nodes=[],links=[],ph={};
+ const N=(type,title,x,y,wv,ins,outs)=>{const n={id:++nid,type:type,pos:[x,y],size:[300,120],flags:{},order:nid-1,mode:0,
+  inputs:ins.map(a=>Object.assign({name:a[0],type:a[1],link:null},a[2]||{})),
+  outputs:outs.map((a,i)=>({name:a[0],type:a[1],links:[],slot_index:i})),title:title,
+  properties:{"Node name for S&R":type},widgets_values:wv};
+  nodes.push(n);if(DESC[type])ph[type]=DESC[type];return n;};
+ const L=(a,as,b,bs)=>{const id=++lid;links.push([id,a.id,as,b.id,bs,a.outputs[as].type]);a.outputs[as].links.push(id);b.inputs[bs].link=id;};
+ const X=".safetensors",M=["model","MODEL"],V=["vae","VAE"],WI=k=>[k,"INT",{widget:{name:k}}];
+ const un=N("UNETLoader","UNET",-2200,100,[$("un").value.trim(),"default"],[],[["MODEL","MODEL"]]);
+ const ck=N("CLIPLoader","CLIP",-2200,300,[$("te").value.trim(),"minimax","default"],[],[["CLIP","CLIP"]]);
+ const vv=N("VAELoader","Video VAE",-2200,500,[$("vae").value+X],[],[["VAE","VAE"]]);
+ const av=aud?N("VAELoader","Audio VAE",-2200,700,["minimax_h3_audio_vae_fp32"+X],[],[["VAE","VAE"]]):null;
+ let m=un;
+ if(lora){const lo=N("LoraLoaderModelOnly","Turbo LoRA",-1950,-250,["minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy"+X,+$("ls").value],[M],[["MODEL","MODEL"]]);L(m,0,lo,0);m=lo;}
+ let fm=m;
+ if($("ec").checked){const ec=N("EasyCache","EasyCache",-1700,-100,[0.3,0.2,0.9,false],[M],[["MODEL","MODEL"]]);L(fm,0,ec,0);fm=ec;}
+ if($("sage").checked){const sg=N("PathchSageAttentionKJ","Sage Attention",-1300,-80,["auto",false],[M],[["MODEL","MODEL"]]);L(fm,0,sg,0);fm=sg;}
+ const ks=N("KSamplerSelect","Sampler",-1700,100,[$("smp").value],[],[["SAMPLER","SAMPLER"]]);
+ const rnd=Math.floor(Math.random()*4294967295),bs=parseInt($("bs").value,10),bsv=isNaN(bs)?-1:bs;
+ const CONT="Continue seamlessly from the supplied first frame. Preserve the same character, clothing, environment, lighting, camera language and audio. No reset, no cut, no fade. ";
+ let giN=null;const gen=$("rs").value==="gen";
+ const gi=()=>{if(giN)return giN;
+  if(!gen){if(g)giN=N("LoadImage","Reference First Frame",-2200,-1300,[g,"image"],[],[["IMAGE","IMAGE"],["MASK","MASK"]]);return giN;}
+  const gp=$("gp").value.trim()||(S[0]&&S[0].c)||main;
+  const c=N("MiniMaxH3ImageToVideo","Reference Still Conditioning",-2200,-1300,[gp,w,h,5],[["clip","CLIP"],V,["first_frame","IMAGE",{shape:7}],["last_frame","IMAGE",{shape:7}],WI("width"),WI("height"),WI("length")],[["positive","CONDITIONING"],["LATENT","LATENT"]]);
+  L(ck,0,c,0);L(vv,0,c,1);
+  const nz=N("RandomNoise","Reference Still Noise",-1800,-1300,[bsv<0?rnd:bsv,"fixed"],[],[["NOISE","NOISE"]]);
+  const gd=N("BasicGuider","Reference Still Guider",-1800,-1150,[],[M,["conditioning","CONDITIONING"]],[["GUIDER","GUIDER"]]);L(fm,0,gd,0);L(c,0,gd,1);
+  const sc=N("BasicScheduler","Reference Still Scheduler",-1800,-1000,[$("sch").value,+$("steps").value,dnv],[M],[["SIGMAS","SIGMAS"]]);L(fm,0,sc,0);
+  const sp=N("SamplerCustomAdvanced","Reference Still Sampler",-1400,-1300,[],[["noise","NOISE"],["guider","GUIDER"],["sampler","SAMPLER"],["sigmas","SIGMAS"],["latent_image","LATENT"]],[["output","LATENT"],["denoised_output","LATENT"]]);
+  L(nz,0,sp,0);L(gd,0,sp,1);L(ks,0,sp,2);L(sc,0,sp,3);L(c,1,sp,4);
+  const vd=N("VAEDecode","Reference Still Decode",-1000,-1300,[],[["samples","LATENT"],V],[["IMAGE","IMAGE"]]);L(sp,0,vd,0);L(vv,0,vd,1);
+  giN=N("ImageFromBatch","Reference Still Frame",-700,-1300,[0,1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(vd,0,giN,0);
+  const pv=N("PreviewImage","Preview Reference Still",-400,-1300,[],[["images","IMAGE"]],[]);L(giN,0,pv,0);
+  return giN;};
+ const lf=[],imgs=[],comps=[],names=[];
+ S.forEach((s,i)=>{
+  const x=-800+i*750,len=s.fr,t=i+1;let img=null,chained=false;
+  const mk=f=>N("LoadImage","First Frame "+t,x,-620,[f,"image"],[],[["IMAGE","IMAGE"],["MASK","MASK"]]);
+  if(mode==="global_first_frame_scene1_only"){if(i===0)img=gi();}
+  else if(mode==="per_scene_manual"){if(s.f)img=mk(s.f);else if(i===0)img=gi();}
+  else if(s.f)img=mk(s.f);else if(i===0)img=gi();else{img=lf[i-1];chained=true;}
+  const seed=s.s!==""&&!isNaN(+s.s)?+s.s:($("sm").value==="same_seed_for_all_scenes"?(bsv<0?rnd:bsv):(bsv<0?Math.floor(Math.random()*4294967295):bsv+i));
+  const nz=N("RandomNoise","Noise "+t,x,200,[seed,"fixed"],[],[["NOISE","NOISE"]]);
+  const c=N("MiniMaxH3ImageToVideo","Segment "+t+" Conditioning",x,-280,[(chained?CONT:"")+(s.c||""),w,h,len],
+   [["clip","CLIP"],V,["first_frame","IMAGE",{shape:7}],["last_frame","IMAGE",{shape:7}],WI("width"),WI("height"),WI("length")],
+   [["positive","CONDITIONING"],["LATENT","LATENT"]]);
+  L(ck,0,c,0);L(vv,0,c,1);if(img)L(img,0,c,2);
+  const gd=N("BasicGuider","Guider "+t,x,350,[],[M,["conditioning","CONDITIONING"]],[["GUIDER","GUIDER"]]);L(fm,0,gd,0);L(c,0,gd,1);
+  const sc=N("BasicScheduler","Scheduler "+t,x,500,[$("sch").value,+$("steps").value,dnv],[M],[["SIGMAS","SIGMAS"]]);L(fm,0,sc,0);
+  const sp=N("SamplerCustomAdvanced","Sampler "+t,x,650,[],[["noise","NOISE"],["guider","GUIDER"],["sampler","SAMPLER"],["sigmas","SIGMAS"],["latent_image","LATENT"]],[["output","LATENT"],["denoised_output","LATENT"]]);
+  L(nz,0,sp,0);L(gd,0,sp,1);L(ks,0,sp,2);L(sc,0,sp,3);L(c,1,sp,4);
+  const vd=N("VAEDecode","Video Decode "+t,x,850,[],[["samples","LATENT"],V],[["IMAGE","IMAGE"]]);L(sp,0,vd,0);L(vv,0,vd,1);
+  const ci=[["images","IMAGE"]];if(aud)ci.push(["audio","AUDIO",{shape:7}]);
+  const cv=N("CreateVideo","Create Video "+t,x,1150,[fps,8],ci,[["VIDEO","VIDEO"]]);L(vd,0,cv,0);
+  if(aud){const ad=N("VAEDecodeAudio","Audio Decode "+t,x,1000,[],[["samples","LATENT"],V],[["AUDIO","AUDIO"]]);L(sp,0,ad,0);L(av,0,ad,1);L(ad,0,cv,1);}
+  const cp=N("GetVideoComponents","Segment "+t+" Components",x,1300,[],[["video","VIDEO"]],[["images","IMAGE"],["audio","AUDIO"],["fps","FLOAT"],["bit_depth","INT"]]);L(cv,0,cp,0);comps.push(cp);
+  if(mode==="last_frame_chain"&&i<S.length-1){const la=N("ImageFromBatch","Segment "+t+" Last Frame",x,1450,[-1,1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,la,0);lf.push(la);}
+  if(chained){const tr=N("ImageFromBatch","Trim Seg "+t,x,1600,[1,len-1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,tr,0);imgs.push(tr);}else imgs.push(cp);
+  const nm=base+"_scene_"+String(t).padStart(2,"0");names.push(nm+".mp4");
+  if($("sv").checked){const sv=N("SaveVideo","Save Segment "+t,x,1750,["video/"+nm,"auto","auto"],[["video","VIDEO"]],[]);L(cv,0,sv,0);}
+ });
+ const jx=-800+S.length*750+100;let cur=imgs[0],ca=comps[0],cas=1;
+ for(let i=1;i<imgs.length;i++){
+  const b=N("ImageBatch","Join Video 1.."+(i+1),jx,400+(i-1)*80,[],[["image1","IMAGE"],["image2","IMAGE"]],[["IMAGE","IMAGE"]]);L(cur,0,b,0);L(imgs[i],0,b,1);cur=b;
+  if(aud){const a=N("AudioConcat","Join Audio 1.."+(i+1),jx,900+(i-1)*80,["after"],[["audio1","AUDIO"],["audio2","AUDIO"]],[["AUDIO","AUDIO"]]);L(ca,cas,a,0);L(comps[i],1,a,1);ca=a;cas=0;}
+ }
+ if(cur){
+  const fi=[["images","IMAGE"]];if(aud)fi.push(["audio","AUDIO",{shape:7}]);
+  const f=N("CreateVideo","Create Final Long Video",jx+400,700,[fps,8],fi,[["VIDEO","VIDEO"]]);L(cur,0,f,0);if(aud)L(ca,cas,f,1);
+  const fs=N("SaveVideo","Save Final Long Video",jx+400,900,["video/"+base,"auto","auto"],[["video","VIDEO"]],[]);L(f,0,fs,0);
+ }
+ const wf={id:"minimax-h3-local-"+S.length+"x",revision:0,last_node_id:nid,last_link_id:lid,nodes:nodes,links:links,groups:[],config:{},extra:{ds:{scale:0.6,offset:[0,0]}},version:0.4};
+ return {E:E,W:W,wf:wf,ph:ph,total:total,frames:frames,names:names,S:S,fin:fin,fps:fps,w:w,h:h,aud:aud,lora:lora,turbo:turbo,mode:mode};
+}
+function preview(r){
+ const o=v=>v?"ON":"OFF",L=[];
+ L.push("Scenes: "+r.S.length+"   Total: "+r.total+"s   Frames: "+r.frames);
+ L.push("Resolution: "+r.w+"x"+r.h+"   FPS: "+r.fps);
+ L.push("LoRA "+o(r.lora)+" | Turbo "+o(r.turbo)+" | Audio "+o(r.aud));
+ L.push("EasyCache "+o($("ec").checked)+" | Sage Attention "+o($("sage").checked));
+ L.push("Sampler: "+$("smp").value+"   Scheduler: "+$("sch").value+"   Denoise: "+$("dn").value);
+ L.push("First-frame mode: "+r.mode);
+ L.push("Scene files: "+(r.names.join(", ")||"-")+($("sv").checked?" (previews)":" (not saved)"));
+ L.push("Final file: "+r.fin);
+ $("pv").textContent=L.join("\n");
+ const x=document.createElement("div");
+ const add=(t,c)=>{const d=document.createElement("div");d.className=c;d.textContent=t;x.appendChild(d);};
+ r.E.forEach(e=>add("ERROR: "+e,"err"));r.W.forEach(e=>add("WARN: "+e,"wrn"));
+ add("NODES TO CONFIRM (all others come from the reference workflow):","ok");
+ Object.keys(r.ph).forEach(k=>add(k+" -> "+r.ph[k],"ok"));
+ if(!Object.keys(r.ph).length)add("(none)","ok");
+ $("pv").appendChild(x);
+}
+function refresh(){preview(build());}
+function gen(){const r=build();preview(r);if(r.E.length){$("out").value="";return null;}
+ const t=JSON.stringify(r.wf,null,2);$("out").value=t;return t;}
+$("bAdd").onclick=()=>{addScene("",null);refresh();};
+$("bRem").onclick=()=>{const c=document.querySelectorAll(".sc");if(c.length>1){c[c.length-1].remove();renum();refresh();}};
+$("bEx").onclick=()=>{
+ $("scenes").innerHTML="";cnt=0;
+ $("main").value="Cinematic 4K footage, soft natural light, consistent character and style";
+ addScene("A lighthouse on a cliff at dawn, waves crashing below",15,"scene1_first.png");
+ addScene("The camera glides along the coast as seagulls take flight",15,"");
+ $("mode").value="per_scene_manual";$("aud").checked=false;$("lora").checked=false;$("turbo").checked=false;
+ autofill();refresh();};
+$("bGen").onclick=gen;
+const copyOut=()=>{const t=gen();if(!t)return;
+ const fb=()=>{$("out").select();document.execCommand("copy");};
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).catch(fb);else fb();};
+$("bCopy").onclick=copyOut;$("bCopy2").onclick=copyOut;
+$("bDl").onclick=()=>{const t=gen();if(!t)return;
+ const u=URL.createObjectURL(new Blob([t],{type:"application/json"})),a=document.createElement("a");
+ a.href=u;a.download="minimax_h3_workflow.json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);};
+["turbo","lora","vae"].forEach(i=>$(i).addEventListener("change",()=>{autofill();refresh();}));
+$("scenes").addEventListener("change",()=>{autofill();refresh();});
+document.querySelector("main").addEventListener("input",refresh);
+$("dd").addEventListener("change",()=>{});
+addScene("",15);autofill();refresh();
+})();
+</script></body></html>
