@@ -20,21 +20,22 @@ input[type=checkbox]{width:auto;margin-right:6px}
 textarea{resize:vertical;min-height:54px}
 .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 10px}
 .cb{display:flex;align-items:center;margin-top:8px}.cb label{margin:0}
-.sc{border:1px solid #333a45;border-radius:5px;padding:8px;margin-bottom:8px;background:#171a1f}
-.sc b{color:#9db4d0}.fr{color:#8fd19e;font-size:12px}
+.sc,.rc{border:1px solid #333a45;border-radius:5px;padding:8px;margin-bottom:8px;background:#171a1f}
+.sc b,.rc b{color:#9db4d0}.fr{color:#8fd19e;font-size:12px}
 .err{color:#ff8a8a}.wrn{color:#f0c674}.ok{color:#8fd19e}
 pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px ui-monospace,Consolas,monospace}
 #out{min-height:160px;font:11px ui-monospace,Consolas,monospace}
+.kx{display:none;margin-top:6px}body.kon .kx{display:block}
 </style></head><body>
 <header><h1>Minimax-H3 &rarr; ComfyUI workflow generator</h1>
 <small>100% offline &middot; RAM 192 GB &middot; VRAM 32 GB &middot; single local GPU &middot; emits ComfyUI frontend (UI) JSON only</small></header>
 <div class="bar">
-<button id="bAdd">Add Scene</button><button id="bRem" class="s">Remove Scene</button><button id="bEx" class="s">Load Example</button>
-<button id="bGen">Generate Workflow JSON</button><button id="bCopy">Copy Workflow JSON</button><button id="bDl">Download Workflow JSON</button>
+<button id="bAdd">Add Scene</button><button id="bRem" class="s">Remove Scene</button><button id="bEx" class="s">Load Example</button><button id="bTpl" class="s">Generate Template</button><button id="bUp" class="s">Upload Filled Template</button><input type="file" id="tplFile" accept=".json,.txt,application/json,text/plain" style="display:none"><span id="tplMsg" style="font-size:12px;margin-left:8px"></span>
+<button id="bGen">Generate Workflow JSON</button><button id="bCopy">Copy Workflow JSON</button><button id="bDl">Download Workflow JSON</button><button id="bPlan" class="s" style="display:none">Download Plan JSON</button><button id="bFF" class="s" style="display:none">Download ffmpeg script</button>
 </div>
 <main><div>
 <section><h2>Prompts</h2>
-<label>1. Main text prompt</label><textarea id="main"></textarea>
+<label>1. Reference images (character / location / style sheets)</label><div id="refs"></div><div style="margin-top:6px"><button class="s" id="bRef">Add reference image</button> <button class="s" id="bRefRm">Remove last</button></div><div class="cb"><input type="checkbox" id="rfirst"><label for="rfirst">Use the first reference with a filename as the scene 1 first frame (when none is set)</label></div>
 <label>2. Negative prompt</label><textarea id="neg">low quality, blurry, distorted faces, extra limbs, watermark, text, flickering, jitter, bad anatomy, oversaturated, noisy, artifacts</textarea></section>
 <section><h2>3. Scenes</h2><div id="scenes"></div></section>
 <section><h2>First frame, audio, LoRA</h2><div class="g">
@@ -47,12 +48,30 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px ui-monospace,C
 <div class="cb"><input type="checkbox" id="aud"><label for="aud">6. Audio enabled</label></div>
 <div class="cb"><input type="checkbox" id="lora"><label for="lora">7. LoRA enabled</label></div>
 <div class="cb"><input type="checkbox" id="turbo"><label for="turbo">8. Turbo 4-step mode</label></div></section>
+<section><h2>Consistency &amp; long-form options (each can be switched off)</h2>
+<div class="cb"><input type="checkbox" id="kf"><label for="kf">A. First + last keyframes per scene (N+1 shared keyframes from your image model)</label></div>
+<div class="g"><div><label>Keyframe filename pattern ({n} = 001, 002...)</label><input id="kfp" value="keyframe_{n}.png"></div>
+<div><label>Render scenes from</label><input id="rf" type="number" min="1" placeholder="1"></div><div><label>to</label><input id="rt" type="number" min="1" placeholder="last"></div></div>
+<div class="cb"><input type="checkbox" id="bib"><label for="bib">B. Inject consistency bible into every scene prompt</label></div>
+<label>Style line</label><textarea id="bst"></textarea>
+<label>Character bible (one per line: Name: look; voice)</label><textarea id="bch"></textarea>
+<label>Global sound-design line</label><input id="bsn">
+<div class="cb"><input type="checkbox" id="ext"><label for="ext">C. Dialogue by external TTS (H3 audio = ambience/effects only)</label></div>
+<div class="cb"><input type="checkbox" id="nj"><label for="nj">D. Skip in-graph join (join with ffmpeg; saves RAM on long films)</label></div>
+<div class="cb"><input type="checkbox" id="exp"><label for="exp">E. Enable plan JSON + ffmpeg assemble script export</label></div>
+<div class="cb"><input type="checkbox" id="rm"><label for="rm">G. Reference-to-video mode (MiniMaxH3ReferenceToVideo + ref2va model; references go in as &lt;Picture N&gt; inputs, no first/last frame)</label></div>
+<div class="g"><div><label>Ref2va diffusion model file</label><input id="un2" value="minimax_h3_ref2va_pruned_int8_convrot.safetensors"></div><div><label>ref_image_size</label><select id="ris"><option>match</option><option>max</option></select></div></div>
+<div class="cb"><input type="checkbox" id="rauto"><label for="rauto">Only link references whose name appears in the scene prompt/dialogue (off = every scene gets all references)</label></div>
+<div class="cb"><input type="checkbox" id="sg" checked><label for="sg">I. Pack each scene into a subgraph node (far fewer nodes, keeps ComfyUI responsive on long films)</label></div>
+<div class="cb"><input type="checkbox" id="lk" checked><label for="lk">H. Force scenes to generate strictly in order (adds a hidden dependency link from each scene to the previous one)</label></div>
+<div class="cb"><input type="checkbox" id="rg"><label for="rg">F. Generate reference images in the workflow (Qwen Image 2.1 text-to-image)</label></div>
+<div class="g"><div><label>Qwen diffusion model file</label><input id="qun" value="qwen_image_2.1_int8_convrot.safetensors"></div><div><label>Qwen text encoder file</label><input id="qte" value="qwen3vl_8b_int8_convrot.safetensors"></div><div><label>Qwen VAE file</label><input id="qvae" value="qwen_image_2.1_vae_bf16.safetensors"></div><div><label>Reference width</label><input id="rw" type="number" value="1024"></div><div><label>Reference height</label><input id="rh" type="number" value="1024"></div><div><label>Steps (official 40-50 with euler)</label><input id="rst" type="number" value="25"></div><div><label>CFG</label><input id="rcfg" type="number" step="0.1" value="1"></div></div></section>
 <section><h2>Video and sampling</h2><div class="g">
 <div><label>11. Width</label><input id="w" type="number" value="512"></div>
 <div><label>12. Height</label><input id="h" type="number" value="288"></div>
 <div><label>13. FPS</label><input id="fps" type="number" value="24"></div>
 <div><label>14. Default scene duration (s)</label><input id="dd" type="number" value="15"></div>
-<div><label>15. Max total duration (s)</label><input id="mx" type="number" value="300" placeholder="no limit"></div>
+<div><label>15. Optional duration warning threshold (s, blank = none)</label><input id="mx" type="number" value="" placeholder="no limit"></div>
 <div><label>16. Steps</label><input id="steps" type="number"></div>
 <div><label>17. CFG</label><input id="cfg" type="number" step="0.1"></div>
 <div><label>18. Sampler</label><select id="smp"><option>euler</option><option>euler_cfg_pp</option><option>euler_ancestral</option><option>euler_ancestral_cfg_pp</option><option>heun</option><option>heunpp2</option><option>dpm_2</option><option>dpm_2_ancestral</option><option>lms</option><option>dpm_fast</option><option>dpm_adaptive</option><option>dpmpp_2s_ancestral</option><option>dpmpp_sde</option><option>dpmpp_2m</option><option>dpmpp_2m_cfg_pp</option><option>dpmpp_2m_sde</option><option>dpmpp_3m_sde</option><option>ddpm</option><option>lcm</option><option>ipndm</option><option>ipndm_v</option><option>deis</option><option selected>res_multistep</option><option>res_multistep_cfg_pp</option><option>res_multistep_ancestral</option><option>gradient_estimation</option><option>er_sde</option><option>seeds_2</option><option>seeds_3</option><option>sa_solver</option><option>ddim</option><option>uni_pc</option><option>uni_pc_bh2</option></select></div>
@@ -66,7 +85,7 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px ui-monospace,C
 <div><label>24. Final output filename</label><input id="fin" value="minimax_h3_final_video.mp4"></div></div>
 <div class="cb"><input type="checkbox" id="ec" checked><label for="ec">EasyCache (speeds up sampling)</label></div>
 <div class="cb"><input type="checkbox" id="sage" checked><label for="sage">Sage Attention (needs KJNodes + sageattention installed)</label></div>
-<div class="cb"><input type="checkbox" id="sv" checked><label for="sv">23. Save individual scene MP4s (previews only, never the final result)</label></div></section>
+<div class="cb"><input type="checkbox" id="sv" checked><label for="sv">Save individual scene MP4s (previews only, never the final result)</label></div></section>
 </div><div>
 <section><h2>Preview</h2><pre id="pv"></pre></section>
 <section><h2>Workflow JSON <button id="bCopy2" style="float:right">Copy</button></h2><textarea id="out" readonly></textarea></section>
@@ -79,34 +98,52 @@ const DESC={LoraLoaderModelOnly:"ComfyUI core LoRA loader; NOT present in the re
 let cnt=0;
 function addScene(p,d,f,s){
  cnt++;const c=document.createElement("div");c.className="sc";
- c.innerHTML='<b></b><label>Scene prompt</label><textarea class="sp"></textarea><div class="g"><div><label>Duration (s)</label><input class="sd" type="number" step="0.5"></div><div><label>First frame filename (optional)</label><input class="sf"></div><div><label>Seed (empty = inherit)</label><input class="ss" type="number"></div></div><div class="fr"></div>';
+ c.innerHTML='<b></b><label>Scene prompt</label><textarea class="sp"></textarea><div class="g"><div><label>Duration (s)</label><input class="sd" type="number" step="0.5"></div><div><label>First frame filename (optional)</label><input class="sf"></div><div><label>Seed (empty = inherit)</label><input class="ss" type="number"></div></div><div class="kx"><div class="g"><div><label>Last frame filename (optional)</label><input class="sl"></div><div class="cb"><input type="checkbox" class="sk"><label>Hard cut before this scene</label></div></div><label>Dialogue (one per line, Speaker: line)</label><textarea class="sdl"></textarea><label>Scene sound design (optional)</label><input class="ssn"><label>Reference images for this scene (numbers or names; blank = auto)</label><input class="srr"></div><div class="fr"></div>';
  c.querySelector(".sp").value=p||"";c.querySelector(".sd").value=d||$("dd").value||15;
  c.querySelector(".sf").value=f||"";c.querySelector(".ss").value=s==null?"":s;
  $("scenes").appendChild(c);renum();
 }
 function renum(){[...document.querySelectorAll(".sc")].forEach((c,i)=>c.querySelector("b").textContent="Scene "+(i+1));}
-function scenes(){return [...document.querySelectorAll(".sc")].map(c=>({p:c.querySelector(".sp").value.trim(),d:parseFloat(c.querySelector(".sd").value),f:c.querySelector(".sf").value.trim(),s:c.querySelector(".ss").value.trim(),el:c}));}
+function scenes(){return [...document.querySelectorAll(".sc")].map(c=>({p:c.querySelector(".sp").value.trim(),d:parseFloat(c.querySelector(".sd").value),f:c.querySelector(".sf").value.trim(),s:c.querySelector(".ss").value.trim(),l:c.querySelector(".sl").value.trim(),k:c.querySelector(".sk").checked,dl:c.querySelector(".sdl").value.trim(),sn:c.querySelector(".ssn").value.trim(),rr:c.querySelector(".srr").value.trim(),el:c}));}
 function autofill(){
  const t=$("turbo").checked;
  $("steps").value=t?4:20;$("cfg").value=t?1.0:5.0;
 }
 function vl(sec,fps){const r=Math.max(5,Math.round(sec*fps));return 17*Math.ceil((r-5)/17)+5;}
 function build(){
- const E=[],W=[],S=scenes(),w=+$("w").value,h=+$("h").value,fps=+$("fps").value;
+ const E=[],W=[],S0=scenes(),w=+$("w").value,h=+$("h").value,fps=+$("fps").value;
  const mode=$("mode").value,aud=$("aud").checked,lora=$("lora").checked,turbo=$("turbo").checked;
- const g=$("gff").value.trim(),main=$("main").value.trim(),mxv=$("mx").value.trim();
+ const g=$("gff").value.trim()||refFirst(),main="",mxv=$("mx").value.trim();
+ const RM=$("rm").checked,kfOn=$("kf").checked&&!RM,bib=$("bib").checked,ext=$("ext").checked,nj=$("nj").checked;
+ const kn=n=>($("kfp").value.trim()||"keyframe_{n}.png").replace("{n}",String(n).padStart(3,"0"));
+ let kc=1;S0.forEach((s,i)=>{s.gi=i;if(!kfOn)return;const cut=i===0||s.k;s.sf=s.f||(cut?kn(kc++):S0[i-1].lf);s.lf=s.l||kn(kc++);});
+ const rf=parseInt($("rf").value,10)||1,rt=parseInt($("rt").value,10)||S0.length;
+ const S=S0.filter((s,i)=>i+1>=rf&&i+1<=rt);
+ if(!S.length)E.push("Scene range selects no scenes.");
+ const chars=$("bch").value.split("\n").map(x=>x.trim()).filter(Boolean).concat(refs().filter(r=>r.n&&r.d).map(r=>r.n+": "+r.d));
+ const compose=s=>{let b=main&&s.p?main+". "+s.p:(main||s.p),x=[];
+  if(bib){const st=$("bst").value.trim();if(st)x.push("Style: "+st);
+   const hay=(s.p+" "+s.dl).toLowerCase(),m=chars.filter(c=>hay.includes(c.split(":")[0].trim().toLowerCase()));
+   (m.length?m:chars).forEach(c=>x.push("Character "+c));
+   const gs=$("bsn").value.trim();if(gs)x.push("Sound: "+gs);}
+  if(s.sn)x.push("Scene sound: "+s.sn);
+  if(aud){if(ext)x.push("No spoken dialogue, no speech; ambience, effects and music only");else s.dl.split("\n").map(l=>l.trim()).filter(Boolean).forEach(l=>x.push("Spoken line, "+l));}
+  return x.length?b+". "+x.join(". ")+".":b;};
  const fin=($("fin").value.trim()||"minimax_h3_final_video.mp4"),base=fin.replace(/\.mp4$/i,"");
  const dnr=$("dn").value.trim(),dnv=dnr===""?1:parseFloat(dnr);
  if(!(dnv>0&&dnv<=1))E.push("Denoise must be a number above 0 and up to 1.");
  if(S.length<1)E.push("At least 1 scene is required.");
- if(!main&&!S.some(s=>s.p))E.push("All prompts are empty: fill the main prompt or at least one scene prompt.");
+ if(!main&&!S.some(s=>s.p))E.push("All prompts are empty: fill at least one scene prompt.");
  if(!(w>0))E.push("Width must be > 0.");if(!(h>0))E.push("Height must be > 0.");if(!(fps>0))E.push("FPS must be > 0.");
  S.forEach((s,i)=>{if(!(s.d>0))E.push("Scene "+(i+1)+": duration must be > 0.");
-  s.fr=vl(s.d||0,fps);s.el.querySelector(".fr").textContent="Valid H3 frame count (17k+5) at "+fps+" fps: "+s.fr;
-  s.c=main&&s.p?main+". "+s.p:(main||s.p);});
+  s.fr=vl(s.d||0,fps);s.el.querySelector(".fr").textContent="Valid H3 frame count (17k+5) at "+fps+" fps: "+s.fr+(kfOn?" | keyframes: "+s.sf+" -> "+s.lf:"");
+  s.c=compose(s);});
  const total=S.reduce((a,s)=>a+(s.d||0),0),frames=S.reduce((a,s)=>a+(s.fr||0),0);
- if(mxv!==""&&total>+mxv)E.push("Total duration "+total+"s exceeds max total duration "+mxv+"s.");
+ if(mxv!==""&&total>+mxv)W.push("Total duration "+total+"s is above your warning threshold of "+mxv+"s (not blocking).");
  if(w%16||h%16)W.push("Width/height not divisible by 16.");
+ if(!nj){const gb=frames*w*h*12/1e9;if(gb>40)W.push("In-graph join holds ~"+Math.round(gb)+" GB of float frames (plus copies). Tick option D and join with ffmpeg.");}
+ if(refs().some(r=>r.f)&&!$("rg").checked)W.push("Reference images are not wired into H3 (it only takes first/last frames). They feed the plan export and your keyframe generation; named descriptions are added to prompts when option B is on.");
+ if(kfOn)W.push("Keyframes ON: "+(kc-1)+" images ("+kn(1)+" ... "+kn(kc-1)+" unless overridden) must be in ComfyUI/input. Last frame feeds H3's last_frame input; first-frame mode and generated reference are ignored.");
  if(turbo&&!lora)W.push("turbo LoRA may be required for 4-step sampling");
  if(+$("bat").value>1)W.push("Batch size ignored: MiniMaxH3ImageToVideo has no batch widget.");
  if(/8b/i.test($("te").value))W.push("An 8B Qwen3-VL encoder outputs 4096-dim embeddings; the H3 model needs 5120-dim (32B encoder). Expect a mat1/mat2 shape error.");
@@ -121,20 +158,54 @@ function build(){
   nodes.push(n);if(DESC[type])ph[type]=DESC[type];return n;};
  const L=(a,as,b,bs)=>{const id=++lid;links.push([id,a.id,as,b.id,bs,a.outputs[as].type]);a.outputs[as].links.push(id);b.inputs[bs].link=id;};
  const X=".safetensors",M=["model","MODEL"],V=["vae","VAE"],WI=k=>[k,"INT",{widget:{name:k}}];
- const un=N("UNETLoader","UNET",-2200,100,[$("un").value.trim(),"default"],[],[["MODEL","MODEL"]]);
+ const un=N("UNETLoader","UNET",-2200,100,[(RM?$("un2").value.trim():$("un").value.trim()),"default"],[],[["MODEL","MODEL"]]);
  const ck=N("CLIPLoader","CLIP",-2200,300,[$("te").value.trim(),"minimax","default"],[],[["CLIP","CLIP"]]);
  const vv=N("VAELoader","Video VAE",-2200,500,[$("vae").value+X],[],[["VAE","VAE"]]);
- const av=aud?N("VAELoader","Audio VAE",-2200,700,["minimax_h3_audio_vae_fp32"+X],[],[["VAE","VAE"]]):null;
+ const av=(aud||RM)?N("VAELoader","Audio VAE",-2200,700,["minimax_h3_audio_vae_fp32"+X],[],[["VAE","VAE"]]):null;
  let m=un;
- if(lora){const lo=N("LoraLoaderModelOnly","Turbo LoRA",-1950,-250,["minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy"+X,+$("ls").value],[M],[["MODEL","MODEL"]]);L(m,0,lo,0);m=lo;}
+ if(lora){const lo=N("LoraLoaderModelOnly","Turbo LoRA",-1950,-250,[(RM?"minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16":"minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy")+X,+$("ls").value],[M],[["MODEL","MODEL"]]);L(m,0,lo,0);m=lo;}
  let fm=m;
  if($("ec").checked){const ec=N("EasyCache","EasyCache",-1700,-100,[0.3,0.2,0.9,false],[M],[["MODEL","MODEL"]]);L(fm,0,ec,0);fm=ec;}
  if($("sage").checked){const sg=N("PathchSageAttentionKJ","Sage Attention",-1300,-80,["auto",false],[M],[["MODEL","MODEL"]]);L(fm,0,sg,0);fm=sg;}
  const ks=N("KSamplerSelect","Sampler",-1700,100,[$("smp").value],[],[["SAMPLER","SAMPLER"]]);
  const rnd=Math.floor(Math.random()*4294967295),bs=parseInt($("bs").value,10),bsv=isNaN(bs)?-1:bs;
+ let refImg=null;
+ const RA=refs(),RG=$("rg").checked,RL=RA.filter(r=>r.d||r.n);
+ if(RG&&!RL.length)W.push("Reference generation (F) is on but no reference has a name or description.");
+ if(RG&&RL.length){
+  W.push("Reference generation uses the Qwen Image 2.1 nodes from your template (TextEncodeQwenImage21, QwenImage21Cache, KSampler, SaveImageAdvanced); the prompt enhancer is not included. CFG 1 ignores the negative prompt. Images save to ComfyUI/output/ref/; copy them into ComfyUI/input to reuse them as LoadImage files.");
+  const qu=N("UNETLoader","Qwen Image 2.1 UNET",-2200,-2600,[$("qun").value.trim(),"default"],[],[["MODEL","MODEL"]]);
+  const qm=N("QwenImage21Cache","Qwen Image 2.1 Cache",-1900,-2600,["auto","default"],[M],[["MODEL","MODEL"]]);L(qu,0,qm,0);
+  const qc=N("CLIPLoader","Qwen Image 2.1 CLIP",-2200,-2400,[$("qte").value.trim(),"qwen_image","default"],[],[["CLIP","CLIP"]]);
+  const qv=N("VAELoader","Qwen Image 2.1 VAE",-2200,-2200,[$("qvae").value.trim()],[],[["VAE","VAE"]]);
+  const rw=+$("rw").value||1024,rh=+$("rh").value||1024,sty=$("bst").value.trim();
+  RL.forEach((r,i)=>{const x=-1600+i*600,k=i+1;
+   const te=N("TextEncodeQwenImage21","Ref "+k+" Prompt",x,-2600,[(r.d||r.n)+(sty?". "+sty:""),$("neg").value.trim(),1024],[["clip","CLIP"],["images.image_1","IMAGE",{shape:7}],["vae","VAE",{shape:7}],["prompt","STRING",{widget:{name:"prompt"}}],["negative_prompt","STRING",{widget:{name:"negative_prompt"}}]],[["positive","CONDITIONING"],["negative","CONDITIONING"],["latent","LATENT"]]);L(qc,0,te,0);
+   const el=N("EmptyLatentImage","Ref "+k+" Latent",x,-2300,[rw,rh,1],[],[["LATENT","LATENT"]]);
+   const kk=N("KSampler","Ref "+k+" Sampler",x,-2150,[bsv<0?rnd+i:bsv+i,"fixed",+$("rst").value||25,+$("rcfg").value||1,"euler","simple",1],[M,["positive","CONDITIONING"],["negative","CONDITIONING"],["latent_image","LATENT"]],[["LATENT","LATENT"]]);
+   L(qm,0,kk,0);L(te,0,kk,1);L(te,1,kk,2);L(el,0,kk,3);
+   const dc=N("VAEDecode","Ref "+k+" Decode",x,-1900,[],[["samples","LATENT"],V],[["IMAGE","IMAGE"]]);L(kk,0,dc,0);L(qv,0,dc,1);
+   const sv=N("SaveImageAdvanced","Save Ref "+k,x,-1750,["ref/"+(r.f||("reference_"+k)).replace(/\.[a-z0-9]+$/i,""),"png","8-bit","sRGB"],[["images","IMAGE"]],[]);L(dc,0,sv,0);
+   r.node=dc;if(!refImg)refImg=dc;});}
+ const rnm={};
+ const rNode=o=>{if(o.r.node)return o.r.node;if(!rnm[o.i])rnm[o.i]=N("LoadImage","Reference "+(o.i+1),-2550,-1000+o.i*150,[o.r.f,"image"],[],[["IMAGE","IMAGE"],["MASK","MASK"]]);return rnm[o.i];};
+ const pick=s=>{const list=RA.map((r,i)=>({r:r,i:i})).filter(o=>o.r.node||o.r.f),sel=(s.rr||"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);let m;
+  if(sel.length)m=list.filter(o=>sel.includes(String(o.i+1))||(o.r.n&&sel.includes(o.r.n.toLowerCase())));
+  else if($("rauto").checked){const hay=(s.p+" "+s.dl).toLowerCase();m=list.filter(o=>o.r.n&&hay.includes(o.r.n.toLowerCase()));if(!m.length)m=list;}else m=list;
+  return m.slice(0,9);};
+ const mkRef=(s,x,t,len,bl)=>{const m=pick(s),tag=m.map((o,j)=>"<Picture "+(j+1)+"> = "+(o.r.n||"reference "+(o.i+1))).join("; ");
+  const ri=j=>["ref_images.ref_image_"+j,"IMAGE",{shape:7,label:"ref_image_"+j}],ins=[["clip","CLIP"],V,["audio_vae","VAE"]];
+  m.forEach((o,j)=>ins.push(ri(j)));if(m.length<9)ins.push(ri(m.length));
+  ins.push(["ref_videos.ref_video_0","IMAGE",{shape:7,label:"ref_video_0"}],["ref_video_audios.ref_video_audio_0","AUDIO",{shape:7,label:"ref_video_audio_0"}],["ref_audios.ref_audio_0","AUDIO",{shape:7,label:"ref_audio_0"}],["prompt","STRING",{widget:{name:"prompt"}}],WI("width"),WI("height"),WI("length"),["ref_image_size","COMBO",{widget:{name:"ref_image_size"}}]);
+  const c=N("MiniMaxH3ReferenceToVideo","Segment "+t+" Reference Conditioning",x,-280,[(tag?"Reference images: "+tag+". ":"")+(s.c||""),w,h,len,$("ris").value],ins,[["positive","CONDITIONING"],["LATENT","LATENT"]]);
+  L(ck,0,c,0);L(vv,0,c,1);L(av,0,c,2);m.forEach((o,j)=>L((j===0&&bl)?bl(rNode(o)):rNode(o),0,c,3+j));return c;};
+ if(RM){W.push("Reference mode: scenes use MiniMaxH3ReferenceToVideo; first/last-frame, keyframe, chain and 'first reference as first frame' options are ignored. Prompts get <Picture N> tags in connection order (max 9 per scene). Scheduler beta or normal is recommended.");
+  if(!RA.some(r=>r.node||r.f))W.push("Reference mode is on but no reference has an image filename (or generation prompt with F on).");
+  if(w%32||h%32)W.push("Reference mode: width/height should be multiples of 32.");}
  const CONT="Continue seamlessly from the supplied first frame. Preserve the same character, clothing, environment, lighting, camera language and audio. No reset, no cut, no fade. ";
+ const LK=$("lk").checked&&(RM||mode!=="last_frame_chain");let prevTok=null,unl=0;
  let giN=null;const gen=$("rs").value==="gen";
- const gi=()=>{if(giN)return giN;
+ const gi=()=>{if(giN)return giN;if(refImg&&$("rfirst").checked&&!$("gff").value.trim())return giN=refImg;
   if(!gen){if(g)giN=N("LoadImage","Reference First Frame",-2200,-1300,[g,"image"],[],[["IMAGE","IMAGE"],["MASK","MASK"]]);return giN;}
   const gp=$("gp").value.trim()||(S[0]&&S[0].c)||main;
   const c=N("MiniMaxH3ImageToVideo","Reference Still Conditioning",-2200,-1300,[gp,w,h,5],[["clip","CLIP"],V,["first_frame","IMAGE",{shape:7}],["last_frame","IMAGE",{shape:7}],WI("width"),WI("height"),WI("length")],[["positive","CONDITIONING"],["LATENT","LATENT"]]);
@@ -148,19 +219,24 @@ function build(){
   giN=N("ImageFromBatch","Reference Still Frame",-700,-1300,[0,1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(vd,0,giN,0);
   const pv=N("PreviewImage","Preview Reference Still",-400,-1300,[],[["images","IMAGE"]],[]);L(giN,0,pv,0);
   return giN;};
- const lf=[],imgs=[],comps=[],names=[];
- S.forEach((s,i)=>{
-  const x=-800+i*750,len=s.fr,t=i+1;let img=null,chained=false;
+ const lf=[],imgs=[],comps=[],names=[],grp=[];
+ S.forEach((s,i)=>{const g0=nid;
+  const x=-800+i*750,len=s.fr,t=s.gi+1;let img=null,chained=false,shared=kfOn&&i>0&&!s.k&&!s.f;
   const mk=f=>N("LoadImage","First Frame "+t,x,-620,[f,"image"],[],[["IMAGE","IMAGE"],["MASK","MASK"]]);
-  if(mode==="global_first_frame_scene1_only"){if(i===0)img=gi();}
+  if(RM){img=null;}else if(kfOn){img=(s.gi===0&&!s.f&&refImg&&$("rfirst").checked)?refImg:mk(s.sf);}else if(mode==="global_first_frame_scene1_only"){if(i===0)img=gi();}
   else if(mode==="per_scene_manual"){if(s.f)img=mk(s.f);else if(i===0)img=gi();}
   else if(s.f)img=mk(s.f);else if(i===0)img=gi();else{img=lf[i-1];chained=true;}
-  const seed=s.s!==""&&!isNaN(+s.s)?+s.s:($("sm").value==="same_seed_for_all_scenes"?(bsv<0?rnd:bsv):(bsv<0?Math.floor(Math.random()*4294967295):bsv+i));
+  const blend=src=>{const b=N("ImageBlend","Order Lock "+t,x,-450,[0,"normal"],[["image1","IMAGE"],["image2","IMAGE"]],[["IMAGE","IMAGE"]]);L(src,0,b,0);L(prevTok,0,b,1);return b;};
+  const lockNow=LK&&i>0&&prevTok;
+  if(!RM&&LK&&i>0&&!img)unl++;
+  if(!RM&&lockNow&&img&&!chained)img=blend(img);
+  const seed=s.s!==""&&!isNaN(+s.s)?+s.s:($("sm").value==="same_seed_for_all_scenes"?(bsv<0?rnd:bsv):(bsv<0?Math.floor(Math.random()*4294967295):bsv+s.gi));
   const nz=N("RandomNoise","Noise "+t,x,200,[seed,"fixed"],[],[["NOISE","NOISE"]]);
-  const c=N("MiniMaxH3ImageToVideo","Segment "+t+" Conditioning",x,-280,[(chained?CONT:"")+(s.c||""),w,h,len],
+  const c=RM?mkRef(s,x,t,len,lockNow?blend:null):N("MiniMaxH3ImageToVideo","Segment "+t+" Conditioning",x,-280,[(chained?CONT:"")+(s.c||""),w,h,len],
    [["clip","CLIP"],V,["first_frame","IMAGE",{shape:7}],["last_frame","IMAGE",{shape:7}],WI("width"),WI("height"),WI("length")],
    [["positive","CONDITIONING"],["LATENT","LATENT"]]);
-  L(ck,0,c,0);L(vv,0,c,1);if(img)L(img,0,c,2);
+  if(!RM){L(ck,0,c,0);L(vv,0,c,1);if(img)L(img,0,c,2);}
+  if(kfOn){const lm=N("LoadImage","Last Frame "+t,x,-950,[s.lf,"image"],[],[["IMAGE","IMAGE"],["MASK","MASK"]]);L(lm,0,c,3);}
   const gd=N("BasicGuider","Guider "+t,x,350,[],[M,["conditioning","CONDITIONING"]],[["GUIDER","GUIDER"]]);L(fm,0,gd,0);L(c,0,gd,1);
   const sc=N("BasicScheduler","Scheduler "+t,x,500,[$("sch").value,+$("steps").value,dnv],[M],[["SIGMAS","SIGMAS"]]);L(fm,0,sc,0);
   const sp=N("SamplerCustomAdvanced","Sampler "+t,x,650,[],[["noise","NOISE"],["guider","GUIDER"],["sampler","SAMPLER"],["sigmas","SIGMAS"],["latent_image","LATENT"]],[["output","LATENT"],["denoised_output","LATENT"]]);
@@ -170,29 +246,71 @@ function build(){
   const cv=N("CreateVideo","Create Video "+t,x,1150,[fps,8],ci,[["VIDEO","VIDEO"]]);L(vd,0,cv,0);
   if(aud){const ad=N("VAEDecodeAudio","Audio Decode "+t,x,1000,[],[["samples","LATENT"],V],[["AUDIO","AUDIO"]]);L(sp,0,ad,0);L(av,0,ad,1);L(ad,0,cv,1);}
   const cp=N("GetVideoComponents","Segment "+t+" Components",x,1300,[],[["video","VIDEO"]],[["images","IMAGE"],["audio","AUDIO"],["fps","FLOAT"],["bit_depth","INT"]]);L(cv,0,cp,0);comps.push(cp);
-  if(mode==="last_frame_chain"&&i<S.length-1){const la=N("ImageFromBatch","Segment "+t+" Last Frame",x,1450,[-1,1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,la,0);lf.push(la);}
-  if(chained){const tr=N("ImageFromBatch","Trim Seg "+t,x,1600,[1,len-1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,tr,0);imgs.push(tr);}else imgs.push(cp);
+  if(LK&&i<S.length-1){prevTok=N("ImageFromBatch","Order Token "+t,x,1450,[len-1,1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,prevTok,0);}
+  if(mode==="last_frame_chain"&&!RM){const la=N("ImageFromBatch","Segment "+t+" Last Frame",x,1450,[-1,1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,la,0);lf.push(la);
+   if(i===S.length-1){const sl=N("SaveImage","Save Last Frame "+t,x+350,1450,[base+"_lastframe_"+String(t).padStart(2,"0")],[["images","IMAGE"]],[]);L(la,0,sl,0);}}
+  if(chained||shared){const tr=N("ImageFromBatch","Trim Seg "+t,x,1600,[1,len-1],[["image","IMAGE"]],[["IMAGE","IMAGE"]]);L(cp,0,tr,0);imgs.push(tr);}else imgs.push(cp);
   const nm=base+"_scene_"+String(t).padStart(2,"0");names.push(nm+".mp4");
-  if($("sv").checked){const sv=N("SaveVideo","Save Segment "+t,x,1750,["video/"+nm,"auto","auto"],[["video","VIDEO"]],[]);L(cv,0,sv,0);}
+  if($("sv").checked||nj){const sv=N("SaveVideo","Save Segment "+t,x,1750,["video/"+nm,"auto","auto"],[["video","VIDEO"]],[]);L(cv,0,sv,0);}
+  grp.push(nodes.filter(n=>n.id>g0&&!/^Reference /.test(n.title)).map(n=>n.id));
  });
+ if(unl)W.push("Order lock: "+unl+" scene(s) have no first-frame image, so they cannot be locked into sequence (use keyframes, per-scene frames, chain or reference mode).");
+ const j0=nid;
  const jx=-800+S.length*750+100;let cur=imgs[0],ca=comps[0],cas=1;
- for(let i=1;i<imgs.length;i++){
+ for(let i=1;!nj&&i<imgs.length;i++){
   const b=N("ImageBatch","Join Video 1.."+(i+1),jx,400+(i-1)*80,[],[["image1","IMAGE"],["image2","IMAGE"]],[["IMAGE","IMAGE"]]);L(cur,0,b,0);L(imgs[i],0,b,1);cur=b;
   if(aud){const a=N("AudioConcat","Join Audio 1.."+(i+1),jx,900+(i-1)*80,["after"],[["audio1","AUDIO"],["audio2","AUDIO"]],[["AUDIO","AUDIO"]]);L(ca,cas,a,0);L(comps[i],1,a,1);ca=a;cas=0;}
  }
- if(cur){
+ if(cur&&!nj){
   const fi=[["images","IMAGE"]];if(aud)fi.push(["audio","AUDIO",{shape:7}]);
   const f=N("CreateVideo","Create Final Long Video",jx+400,700,[fps,8],fi,[["VIDEO","VIDEO"]]);L(cur,0,f,0);if(aud)L(ca,cas,f,1);
   const fs=N("SaveVideo","Save Final Long Video",jx+400,900,["video/"+base,"auto","auto"],[["video","VIDEO"]],[]);L(f,0,fs,0);
  }
- const wf={id:"minimax-h3-local-"+S.length+"x",revision:0,last_node_id:nid,last_link_id:lid,nodes:nodes,links:links,groups:[],config:{},extra:{ds:{scale:0.6,offset:[0,0]}},version:0.4};
- return {E:E,W:W,wf:wf,ph:ph,total:total,frames:frames,names:names,S:S,fin:fin,fps:fps,w:w,h:h,aud:aud,lora:lora,turbo:turbo,mode:mode};
+ const uid=()=>"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==="x"?r:(r&3|8)).toString(16);});
+ let subs=[];
+ if($("sg").checked&&S.length>1){
+  const n0=JSON.parse(JSON.stringify(nodes)),l0=JSON.parse(JSON.stringify(links)),nid0=nid,lid0=lid,jids=nodes.filter(n=>n.id>j0).map(n=>n.id);
+  const pack=(ids,title,px,py)=>{
+   const set=new Set(ids),NM={};nodes.forEach(n=>{NM[n.id]=n;});
+   const sid=uid(),inst={id:++nid,type:sid,pos:[px,py],size:[320,100],flags:{},order:nid-1,mode:0,inputs:[],outputs:[],properties:{},title:title};
+   const sin=[],sout=[],sl=[],rest=[],im={},om={};
+   links.forEach(l=>{const o=l[1],os=l[2],t=l[3],ts=l[4],ty=l[5],a=set.has(o),b=set.has(t);
+    if(a&&b)sl.push({id:l[0],origin_id:o,origin_slot:os,target_id:t,target_slot:ts,type:ty});
+    else if(b){const k=o+":"+os;let ix=im[k];
+     if(ix===undefined){ix=sin.length;im[k]=ix;const nm="in"+ix,lb=(NM[o]&&NM[o].title)||nm;sin.push({id:uid(),name:nm,label:lb,type:ty,linkIds:[],pos:[0,0]});inst.inputs.push({name:nm,label:lb,type:ty,link:l[0]});rest.push([l[0],o,os,inst.id,ix,ty]);}
+     const nl=++lid;sl.push({id:nl,origin_id:-10,origin_slot:ix,target_id:t,target_slot:ts,type:ty});sin[ix].linkIds.push(nl);NM[t].inputs[ts].link=nl;}
+    else if(a){const k=o+":"+os;let ox=om[k];
+     if(ox===undefined){ox=sout.length;om[k]=ox;const nm="out"+ox;sout.push({id:uid(),name:nm,type:ty,linkIds:[],pos:[0,0]});inst.outputs.push({name:nm,type:ty,links:[]});
+      const nl=++lid;sl.push({id:nl,origin_id:o,origin_slot:os,target_id:-20,target_slot:ox,type:ty});sout[ox].linkIds.push(nl);}
+     rest.push([l[0],inst.id,ox,t,ts,ty]);}
+    else rest.push(l);});
+   const oi={},oo={},gn=ids.map(i=>NM[i]);
+   sl.forEach(l=>{const k=l.origin_id+":"+l.origin_slot;(oi[k]=oi[k]||[]).push(l.id);});
+   gn.forEach(n=>n.outputs.forEach((o,k)=>{o.links=oi[n.id+":"+k]||[];}));
+   rest.forEach(l=>{const k=l[1]+":"+l[2];(oo[k]=oo[k]||[]).push(l[0]);});
+   const keep=nodes.filter(n=>!set.has(n.id));
+   keep.forEach(n=>n.outputs.forEach((o,k)=>{o.links=oo[n.id+":"+k]||[];}));
+   inst.outputs.forEach((o,k)=>{o.links=oo[inst.id+":"+k]||[];});
+   inst.size=[320,50+24*Math.max(inst.inputs.length,inst.outputs.length)];
+   const xs=gn.map(n=>n.pos[0]),ys=gn.map(n=>n.pos[1]),x0=Math.min(...xs)-420,x1=Math.max(...xs)+420,y0=Math.min(...ys);
+   sin.forEach((q,i)=>{q.pos=[x0+20,y0+20+i*20];});sout.forEach((q,i)=>{q.pos=[x1+10,y0+20+i*20];});
+   subs.push({id:sid,version:1,state:{lastGroupId:0,lastNodeId:nid,lastLinkId:lid,lastRerouteId:0},revision:0,config:{},name:title,inputNode:{id:-10,bounding:[x0,y0,150,Math.max(60,sin.length*20+40)]},outputNode:{id:-20,bounding:[x1,y0,130,Math.max(60,sout.length*20+40)]},inputs:sin,outputs:sout,widgets:[],nodes:gn,groups:[],links:sl,extra:{}});
+   keep.push(inst);nodes.splice(0,nodes.length,...keep);links.splice(0,links.length,...rest);};
+  try{
+   grp.forEach((ids,k)=>pack(ids,"Scene "+(S[k].gi+1),-800+(k%8)*420,Math.floor(k/8)*560));
+   if(jids.length>2)pack(jids,"Join & Save",-800,Math.ceil(grp.length/8)*560+80);
+   W.push("Subgraphs: each scene is one node. Double-click a scene node to open it and edit its prompt, frames or seed; the join is packed too.");
+  }catch(err){nodes.splice(0,nodes.length,...n0);links.splice(0,links.length,...l0);nid=nid0;lid=lid0;subs=[];W.push("Subgraph packing failed ("+err.message+"); exported flat instead.");}
+ }
+ const wf={id:uid(),revision:0,last_node_id:nid,last_link_id:lid,nodes:nodes,links:links,groups:[],definitions:{subgraphs:subs},config:{},extra:{ds:{scale:0.6,offset:[0,0]}},version:0.4};
+ return {S0:S0,kfOn:kfOn,ext:ext,nj:nj,base:base,E:E,W:W,wf:wf,ph:ph,total:total,frames:frames,names:names,S:S,fin:fin,fps:fps,w:w,h:h,aud:aud,lora:lora,turbo:turbo,mode:mode};
 }
 function preview(r){
  const o=v=>v?"ON":"OFF",L=[];
  L.push("Scenes: "+r.S.length+"   Total: "+r.total+"s   Frames: "+r.frames);
  L.push("Resolution: "+r.w+"x"+r.h+"   FPS: "+r.fps);
  L.push("LoRA "+o(r.lora)+" | Turbo "+o(r.turbo)+" | Audio "+o(r.aud));
+ L.push("Keyframes "+o(r.kfOn)+" | Bible "+o($("bib").checked)+" | External TTS "+o(r.ext)+" | In-graph join "+o(!r.nj));
  L.push("EasyCache "+o($("ec").checked)+" | Sage Attention "+o($("sage").checked));
  L.push("Sampler: "+$("smp").value+"   Scheduler: "+$("sch").value+"   Denoise: "+$("dn").value);
  L.push("First-frame mode: "+r.mode);
@@ -207,19 +325,104 @@ function preview(r){
  if(!Object.keys(r.ph).length)add("(none)","ok");
  $("pv").appendChild(x);
 }
-function refresh(){preview(build());}
-function gen(){const r=build();preview(r);if(r.E.length){$("out").value="";return null;}
+function addRef(n,f,d){const c=document.createElement("div");c.className="rc";
+ c.innerHTML='<b></b><div class="g"><div><label>Name / label (e.g. Maya, Harbor town)</label><input class="rn"></div><div><label>Image filename (file in ComfyUI/input, or saved name when generating)</label><input class="rfn" placeholder="maya_sheet.png"></div></div><label>Description (the generation prompt when F is on; look, outfit, voice)</label><textarea class="rd"></textarea>';
+ c.querySelector(".rn").value=n||"";c.querySelector(".rfn").value=f||"";c.querySelector(".rd").value=d||"";$("refs").appendChild(c);
+ [...document.querySelectorAll(".rc")].forEach((x,i)=>x.querySelector("b").textContent="Reference "+(i+1));}
+function refs(){return [...document.querySelectorAll(".rc")].map(c=>({n:c.querySelector(".rn").value.trim(),f:c.querySelector(".rfn").value.trim(),d:c.querySelector(".rd").value.trim()}));}
+function refFirst(){if(!$("rfirst").checked)return "";const r=refs().find(x=>x.f);return r?r.f:"";}
+function refresh(){sync();preview(build());}
+function dl(n,t,m){const u=URL.createObjectURL(new Blob([t],{type:m})),a=document.createElement("a");a.href=u;a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+function sync(){document.body.classList.toggle("kon",$("kf").checked||$("bib").checked||$("ext").checked||$("rm").checked);$("bPlan").style.display=$("bFF").style.display=$("exp").checked?"":"none";}
+function plan(r){const sp=t=>t.split("\n").map(x=>x.trim()).filter(Boolean);
+ return JSON.stringify({output:r.fin,fps:r.fps,width:r.w,height:r.h,style:$("bst").value.trim(),characters:sp($("bch").value),reference_images:refs().map(r=>({name:r.n,file:r.f,description:r.d})),global_sound:$("bsn").value.trim(),external_tts:r.ext,
+ scenes:r.S0.map((s,i)=>({scene:i+1,prompt:s.p,duration_s:s.d,frames:vl(s.d||0,r.fps),first_frame:r.kfOn?s.sf:s.f,last_frame:r.kfOn?s.lf:s.l,hard_cut:i===0||s.k,dialogue:sp(s.dl),sound:s.sn,segment_prefix:r.base+"_scene_"+String(i+1).padStart(2,"0")}))},null,2);}
+function ffscript(r){const T=i=>String(i+1).padStart(2,"0"),st=(1/r.fps).toFixed(6);
+ const L=['#!/usr/bin/env bash','# Run inside your ComfyUI output folder (needs ffmpeg). Optional TTS dialogue: dialogue/scene_NN.wav','set -e','mkdir -p seg','ENC="-c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000"',
+ 'proc(){','f=$(ls "video/'+r.base+'_scene_$1_"*.mp4 2>/dev/null | head -n1)','[ -z "$f" ] && { echo "missing scene $1"; return; }','[ -s "seg/$1.mp4" ] && return','VF="null"; AF="anull"',
+ '[ "$2" = 1 ] && { VF="trim=start_frame=1,setpts=PTS-STARTPTS"; AF="atrim=start='+st+',asetpts=PTS-STARTPTS"; }','D="dialogue/scene_$1.wav"'];
+ if(r.aud)L.push('if [ -f "$D" ]; then ffmpeg -y -loglevel error -i "$f" -i "$D" -filter_complex "[0:v]$VF[v];[0:a]$AF,loudnorm=I=-20:TP=-2[a0];[1:a]loudnorm=I=-16:TP=-1.5[a1];[a0][a1]amix=inputs=2:duration=first:normalize=0[a]" -map "[v]" -map "[a]" $ENC "seg/$1.mp4"','else ffmpeg -y -loglevel error -i "$f" -filter_complex "[0:v]$VF[v];[0:a]$AF,loudnorm=I=-20:TP=-2[a]" -map "[v]" -map "[a]" $ENC "seg/$1.mp4"','fi');
+ else if(r.ext)L.push('if [ -f "$D" ]; then IN=(-i "$D"); else IN=(-f lavfi -i anullsrc=r=48000:cl=stereo); fi','ffmpeg -y -loglevel error -i "$f" "${IN[@]}" -filter_complex "[0:v]$VF[v];[1:a]aresample=48000,apad[a]" -map "[v]" -map "[a]" -shortest $ENC "seg/$1.mp4"');
+ else L.push('ffmpeg -y -loglevel error -i "$f" -vf "$VF" -an -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p "seg/$1.mp4"');
+ L.push('}');
+ r.S0.forEach((s,i)=>L.push('proc '+T(i)+' '+(i>0&&!s.k&&r.kfOn?1:0)));
+ L.push(': > list.txt');
+ r.S0.forEach((s,i)=>L.push('[ -s seg/'+T(i)+'.mp4 ] && echo "file \'seg/'+T(i)+'.mp4\'" >> list.txt'));
+ L.push('ffmpeg -y -f concat -safe 0 -i list.txt -c copy "'+r.base+'_ffmpeg_joined.mp4"');
+ return L.join("\n")+"\n";}
+function gen(){const r=build();preview(r);if(r.E.length){$("out").value="";alert("Cannot generate the workflow:\n- "+r.E.join("\n- "));return null;}
  const t=JSON.stringify(r.wf,null,2);$("out").value=t;return t;}
 $("bAdd").onclick=()=>{addScene("",null);refresh();};
 $("bRem").onclick=()=>{const c=document.querySelectorAll(".sc");if(c.length>1){c[c.length-1].remove();renum();refresh();}};
 $("bEx").onclick=()=>{
  $("scenes").innerHTML="";cnt=0;
- $("main").value="Cinematic 4K footage, soft natural light, consistent character and style";
+ $("bst").value="Cinematic 4K footage, soft natural light, consistent character and style";$("bib").checked=true;
  addScene("A lighthouse on a cliff at dawn, waves crashing below",15,"scene1_first.png");
  addScene("The camera glides along the coast as seagulls take flight",15,"");
  $("mode").value="per_scene_manual";$("aud").checked=false;$("lora").checked=false;$("turbo").checked=false;
  autofill();refresh();};
+$("bRef").onclick=()=>{addRef();refresh();};
+$("bRefRm").onclick=()=>{const c=document.querySelectorAll(".rc");if(c.length>0){c[c.length-1].remove();refresh();}};
+$("rm").addEventListener("change",()=>{if($("rm").checked&&$("sch").value==="simple")$("sch").value="beta";refresh();});
+function tplGet(){
+ const sp=t=>t.split("\n").map(x=>x.trim()).filter(Boolean),ch=sp($("bch").value);
+ const rf=refs().map(r=>({name:r.n,filename:r.f,description:r.d}));
+ const sc=scenes().map(x=>({prompt:x.p,duration_s:x.d>0?x.d:(+$("dd").value||15),first_frame:x.f,last_frame:x.l,hard_cut:x.k,dialogue:sp(x.dl),sound:x.sn,references:x.rr,seed:x.s===""?null:Number(x.s)}));
+ return {_instructions:[
+ "HOW TO USE: fill in this JSON template and return ONLY the completed JSON (no commentary, no markdown). Keep every key and the exact structure; do not rename keys. Keys starting with _ are ignored.",
+ "story_brief is the premise or long prompt written by the user. Expand it into a full scene list. target_runtime_minutes: make the sum of all scene duration_s match it.",
+ "scenes: one object per continuous clip, in story order. prompt = what is seen plus camera movement, present tense, concrete visual detail. Use character and location names exactly as in reference_images[].name so they stay consistent. Do not put dialogue in prompt.",
+ "duration_s: normally 5 to 15 seconds. The generator rounds each clip up to a valid frame count automatically.",
+ "dialogue: array of strings formatted 'Speaker: line'. sound: short ambience / foley / music note for the scene. Leave empty if none.",
+ "hard_cut: true when the scene starts a new shot or location (matters when options.keyframes is true). first_frame and last_frame: leave empty unless the user supplied image filenames.",
+ "reference_images: one entry per character, location or style sheet. name = short label; description = look, outfit and voice (also the image-generation prompt when options.generate_reference_images is true); filename = image name in ComfyUI input (empty if generating). At most 9 are used per scene.",
+ "scenes[].references: optional list such as '1,3' or names to limit which reference images a scene uses; empty means all references.",
+ "consistency: style_line = one sentence of visual style shared by every scene; character_bible = array of 'Name: look; voice' lines; global_sound = one line of overall sound design.",
+ "settings and options: keep the current values unless the user asks for a change."],
+ story_brief:"",target_runtime_minutes:null,
+ settings:{width:+$("w").value,height:+$("h").value,fps:+$("fps").value,default_scene_duration_s:+$("dd").value,output_name:$("fin").value,negative_prompt:$("neg").value,first_frame_mode:$("mode").value},
+ options:{audio:$("aud").checked,reference_mode:$("rm").checked,keyframes:$("kf").checked,consistency_bible:$("bib").checked,external_tts:$("ext").checked,skip_in_graph_join:$("nj").checked,generate_reference_images:$("rg").checked,plan_export:$("exp").checked},
+ consistency:{style_line:$("bst").value.trim(),character_bible:ch.length?ch:["Name: look; voice"],global_sound:$("bsn").value.trim()},
+ reference_images:rf.some(r=>r.name||r.filename||r.description)?rf:[{name:"",filename:"",description:""}],
+ scenes:sc};}
+function tplLoad(txt){
+ let t=txt.trim().replace(/^```[a-z]*\s*/i,"").replace(/```\s*$/,"");
+ const a=t.indexOf("{"),b=t.lastIndexOf("}");if(a<0||b<a)throw new Error("No JSON object found in the file.");
+ const d=JSON.parse(t.slice(a,b+1)),warn=[];
+ if(d.nodes&&d.links)throw new Error("this is a ComfyUI workflow, not a project template. Use Generate Template, have your AI fill it in, then upload that file.");
+ const set=(id,v)=>{if(typeof v==="string"||(typeof v==="number"&&isFinite(v)))$(id).value=v;};
+ const ck=(id,v)=>{if(typeof v==="boolean")$(id).checked=v;};
+ const lines=v=>Array.isArray(v)?v.map(x=>String(x).trim()).filter(Boolean).join("\n"):(typeof v==="string"?v:"");
+ const S=d.settings||{},O=d.options||{},C=d.consistency||{};
+ [["w","width"],["h","height"],["fps","fps"],["dd","default_scene_duration_s"],["fin","output_name"],["neg","negative_prompt"]].forEach(k=>{if(S[k[1]]!==undefined&&S[k[1]]!==null)set(k[0],S[k[1]]);});
+ if([...$("mode").options].some(o=>o.value===S.first_frame_mode))$("mode").value=S.first_frame_mode;
+ [["aud","audio"],["rm","reference_mode"],["kf","keyframes"],["bib","consistency_bible"],["ext","external_tts"],["nj","skip_in_graph_join"],["rg","generate_reference_images"],["exp","plan_export"]].forEach(k=>ck(k[0],O[k[1]]));
+ if(C.style_line!==undefined)$("bst").value=lines(C.style_line);
+ if(C.character_bible!==undefined)$("bch").value=lines(C.character_bible);
+ if(C.global_sound!==undefined)$("bsn").value=lines(C.global_sound);
+ let nr=0,ns=0;
+ if(Array.isArray(d.reference_images)){$("refs").innerHTML="";
+  d.reference_images.forEach(r=>{if(!r||!(r.name||r.filename||r.description))return;addRef(String(r.name||""),String(r.filename||""),String(r.description||""));nr++;});
+  if(!nr)addRef();}
+ if(Array.isArray(d.scenes)&&d.scenes.length){$("scenes").innerHTML="";cnt=0;
+  d.scenes.forEach((x,i)=>{x=x||{};const dur=Number(x.duration_s)>0?Number(x.duration_s):null,sd=x.seed===null||x.seed===undefined||x.seed===""||!isFinite(Number(x.seed))?null:Number(x.seed);
+   if(!x.prompt)warn.push("scene "+(i+1)+" has no prompt");
+   addScene(String(x.prompt||""),dur,String(x.first_frame||""),sd);
+   const c=[...document.querySelectorAll(".sc")].pop();
+   c.querySelector(".sl").value=String(x.last_frame||"");c.querySelector(".sk").checked=!!x.hard_cut;
+   c.querySelector(".sdl").value=lines(x.dialogue);c.querySelector(".ssn").value=String(x.sound||"");
+   c.querySelector(".srr").value=Array.isArray(x.references)?x.references.join(","):String(x.references||"");ns++;});}
+ else warn.push("no scenes found; existing scenes were kept");
+ refresh();
+ return "Loaded "+ns+" scene(s) and "+nr+" reference image(s)."+(warn.length?" Check: "+warn.slice(0,5).join("; ")+".":"")+" Review, then generate/download the workflow.";}
+$("bTpl").onclick=()=>{dl("h3_project_template.json",JSON.stringify(tplGet(),null,2),"application/json");$("tplMsg").textContent="Template downloaded. Give it to your AI with your story, then upload the result.";};
+$("bUp").onclick=()=>$("tplFile").click();
+$("tplFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+ r.onload=()=>{try{$("tplMsg").textContent=tplLoad(String(r.result));}catch(err){$("tplMsg").textContent="Upload failed: "+err.message;}e.target.value="";};
+ r.onerror=()=>{$("tplMsg").textContent="Could not read the file.";};r.readAsText(f);};
 $("bGen").onclick=gen;
+$("bPlan").onclick=()=>dl("minimax_h3_plan.json",plan(build()),"application/json");
+$("bFF").onclick=()=>dl("assemble_long_video.sh",ffscript(build()),"text/x-shellscript");
 const copyOut=()=>{const t=gen();if(!t)return;
  const fb=()=>{$("out").select();document.execCommand("copy");};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).catch(fb);else fb();};
@@ -231,6 +434,8 @@ $("bDl").onclick=()=>{const t=gen();if(!t)return;
 $("scenes").addEventListener("change",()=>{autofill();refresh();});
 document.querySelector("main").addEventListener("input",refresh);
 $("dd").addEventListener("change",()=>{});
-addScene("",15);autofill();refresh();
+addScene("",15);addRef();autofill();refresh();
 })();
-</script></body></html>
+</script>
+</body>
+</html>
